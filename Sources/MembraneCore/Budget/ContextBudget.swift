@@ -21,8 +21,8 @@ public struct ContextBudget: Sendable {
 
     public let totalTokens: Int
     private var buckets: OrderedDictionary<BucketID, BucketAllocation>
-    public let kvBytesPerToken: Int?
-    public let kvMemoryBudgetBytes: Int?
+    public private(set) var kvBytesPerToken: Int?
+    public private(set) var kvMemoryBudgetBytes: Int?
 
     public init(
         totalTokens: Int,
@@ -53,6 +53,17 @@ public struct ContextBudget: Sendable {
 
     public func allocated(for bucket: BucketID) -> Int {
         buckets[bucket]?.allocated ?? 0
+    }
+
+    public mutating func setKVSizing(kvBytesPerToken: Int?, kvMemoryBudgetBytes: Int?) {
+        self.kvBytesPerToken = kvBytesPerToken
+        self.kvMemoryBudgetBytes = kvMemoryBudgetBytes
+    }
+
+    public func withKVSizing(kvBytesPerToken: Int?, kvMemoryBudgetBytes: Int?) -> ContextBudget {
+        var copy = self
+        copy.setKVSizing(kvBytesPerToken: kvBytesPerToken, kvMemoryBudgetBytes: kvMemoryBudgetBytes)
+        return copy
     }
 
     public var totalAllocated: Int {
