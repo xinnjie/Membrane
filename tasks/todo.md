@@ -6,6 +6,12 @@
 - [ ] Review RAPTOR retriever/node/tests focusing on deterministic ordering, token budget handling, stop-on-exhaustion semantics.
 - [ ] Summarize findings for the user, highlighting regressions or pass-through residual risks.
 
+## Task 19 Feasibility Analysis
+- [x] Identify Task 19 goals (speculative scheduler + verifier/rollback) and relevant MLXLMCommon primitives within /Users/chriskarani/CodingProjects/AIStack/Conduit.
+- [x] Assess current Conduit architecture for integration points, deterministic constraints, and failure recovery hooks needed for the scheduler/verifier.
+- [ ] Draft deterministic architecture proposal covering scheduling flow, verifier/rollback, kill switch/auto-disable, telemetry, and benchmark plan with thresholds.
+- [ ] Capture outstanding risks, dependencies, and verification steps for user review.
+
 - [ ] Wax Task 21: List APIs for frame roles, metadata, payload storage, HybridSearch.rrfFusion, canonical encodings/compression, retrieval filtering.
 - [ ] Wax Task 21: List APIs for frame roles, metadata, payload storage, HybridSearch.rrfFusion, canonical encodings/compression, retrieval filtering.
 
