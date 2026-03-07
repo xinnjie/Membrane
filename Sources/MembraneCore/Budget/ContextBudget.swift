@@ -20,6 +20,7 @@ public struct ContextBudget: Sendable {
     }
 
     public let totalTokens: Int
+    public let profile: BudgetProfile
     private var buckets: OrderedDictionary<BucketID, BucketAllocation>
     public private(set) var kvBytesPerToken: Int?
     public private(set) var kvMemoryBudgetBytes: Int?
@@ -31,14 +32,18 @@ public struct ContextBudget: Sendable {
         kvMemoryBudgetBytes: Int? = nil
     ) {
         self.totalTokens = totalTokens
+        self.profile = profile
         self.kvBytesPerToken = kvBytesPerToken
         self.kvMemoryBudgetBytes = kvMemoryBudgetBytes
 
         let profileCeilings = profile.ceilings(for: totalTokens)
         var ordered = OrderedDictionary<BucketID, BucketAllocation>()
+        var ceilingSum = 0
         for bucket in BucketID.allCases {
-            let ceiling = max(profileCeilings[bucket] ?? 0, 0)
-            ordered[bucket] = BucketAllocation(ceiling: ceiling)
+            let raw = max(profileCeilings[bucket] ?? 0, 0)
+            let clamped = min(raw, totalTokens - ceilingSum)
+            ordered[bucket] = BucketAllocation(ceiling: clamped)
+            ceilingSum += clamped
         }
         self.buckets = ordered
     }

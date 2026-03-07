@@ -56,14 +56,20 @@ public actor PointerResolver: Sendable {
 
 public actor InMemoryPointerStore: PointerStore {
     private var payloadByID: [String: Data]
+    private var accessOrder: [String]
+    private let maxEntries: Int
 
-    public init() {
+    public init(maxEntries: Int = 1024) {
         self.payloadByID = [:]
+        self.accessOrder = []
+        self.maxEntries = max(1, maxEntries)
     }
 
     public func store(payload: Data, dataType: MemoryPointer.DataType, summary: String) async throws -> MemoryPointer {
         let id = Self.pointerID(for: payload)
         payloadByID[id] = payload
+        touchAccessOrder(id)
+        evictIfNeeded()
         return MemoryPointer(id: id, dataType: dataType, byteSize: payload.count, summary: summary)
     }
 
@@ -71,16 +77,30 @@ public actor InMemoryPointerStore: PointerStore {
         guard let payload = payloadByID[pointerID] else {
             throw MembraneError.pointerResolutionFailed(pointerID: pointerID)
         }
+        touchAccessOrder(pointerID)
         return payload
     }
 
     public func delete(pointerID: String) async {
         payloadByID.removeValue(forKey: pointerID)
+        accessOrder.removeAll { $0 == pointerID }
+    }
+
+    private func touchAccessOrder(_ id: String) {
+        accessOrder.removeAll { $0 == id }
+        accessOrder.append(id)
+    }
+
+    private func evictIfNeeded() {
+        while payloadByID.count > maxEntries, let oldest = accessOrder.first {
+            payloadByID.removeValue(forKey: oldest)
+            accessOrder.removeFirst()
+        }
     }
 
     private static func pointerID(for payload: Data) -> String {
         let digest = SHA256.hash(data: payload)
         let hex = digest.map { String(format: "%02x", $0) }.joined()
-        return "ptr_\(hex.prefix(12))"
+        return "ptr_\(hex.prefix(16))"
     }
 }

@@ -13,6 +13,7 @@ public actor MembranePipeline {
     private let pageStage: (any PageStage)?
     private let emitStage: (any EmitStage)?
     private let mode: PipelineMode
+    private let stageTimeout: Duration?
 
     public init(
         budget: ContextBudget,
@@ -21,7 +22,8 @@ public actor MembranePipeline {
         compress: (any CompressStage)? = nil,
         page: (any PageStage)? = nil,
         emit: (any EmitStage)? = nil,
-        mode: PipelineMode = .full
+        mode: PipelineMode = .full,
+        stageTimeout: Duration? = nil
     ) {
         self.baseBudget = budget
         self.intakeStage = intake
@@ -30,6 +32,7 @@ public actor MembranePipeline {
         self.pageStage = page
         self.emitStage = emit
         self.mode = mode
+        self.stageTimeout = stageTimeout
     }
 
     public static func foundationModel(
@@ -38,7 +41,8 @@ public actor MembranePipeline {
         allocator: (any BudgetStage)? = nil,
         compress: (any CompressStage)? = nil,
         page: (any PageStage)? = nil,
-        emit: (any EmitStage)? = nil
+        emit: (any EmitStage)? = nil,
+        stageTimeout: Duration? = nil
     ) -> MembranePipeline {
         MembranePipeline(
             budget: budget,
@@ -47,7 +51,8 @@ public actor MembranePipeline {
             compress: compress,
             page: page,
             emit: emit,
-            mode: .budgetOnly
+            mode: .budgetOnly,
+            stageTimeout: stageTimeout
         )
     }
 
@@ -57,7 +62,8 @@ public actor MembranePipeline {
         allocator: (any BudgetStage)? = nil,
         compress: (any CompressStage)? = nil,
         page: (any PageStage)? = nil,
-        emit: (any EmitStage)? = nil
+        emit: (any EmitStage)? = nil,
+        stageTimeout: Duration? = nil
     ) -> MembranePipeline {
         MembranePipeline(
             budget: budget,
@@ -66,8 +72,31 @@ public actor MembranePipeline {
             compress: compress,
             page: page,
             emit: emit,
-            mode: .full
+            mode: .full,
+            stageTimeout: stageTimeout
         )
+    }
+
+    private func runWithTimeout<T: Sendable>(
+        stage stageName: String,
+        _ work: @Sendable () async throws -> T
+    ) async throws -> T {
+        guard let stageTimeout else {
+            return try await work()
+        }
+        let start = ContinuousClock.now
+        return try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await work() }
+            group.addTask {
+                try await Task.sleep(for: stageTimeout)
+                throw MembraneError.stageTimeout(stage: stageName, elapsed: ContinuousClock.now - start)
+            }
+            guard let result = try await group.next() else {
+                throw MembraneError.stageTimeout(stage: stageName, elapsed: ContinuousClock.now - start)
+            }
+            group.cancelAll()
+            return result
+        }
     }
 
     public func prepare(_ request: ContextRequest) async throws -> PlannedRequest {
@@ -88,16 +117,24 @@ public actor MembranePipeline {
             history: request.history,
             retrieval: request.retrieval,
             pointers: request.pointers,
-            metadata: ContextMetadata(modelProfile: .foundationModels4K)
+            metadata: ContextMetadata(modelProfile: baseBudget.profile)
         )
 
         if let intakeStage {
-            window = try await intakeStage.process(request, budget: budget)
+            try Task.checkCancellation()
+            let currentBudget = budget
+            window = try await runWithTimeout(stage: "intake") {
+                try await intakeStage.process(request, budget: currentBudget)
+            }
         }
 
         var budgeted = BudgetedContext(window: window, budget: budget)
         if let allocatorStage {
-            budgeted = try await allocatorStage.process(budgeted.window, budget: budgeted.budget)
+            try Task.checkCancellation()
+            let input = budgeted
+            budgeted = try await runWithTimeout(stage: "budget") {
+                try await allocatorStage.process(input.window, budget: input.budget)
+            }
         }
         budget = budgeted.budget
 
@@ -111,23 +148,27 @@ public actor MembranePipeline {
             )
         )
         if let compressStage {
-            compressed = try await compressStage.process(
-                BudgetedContext(window: compressed.window, budget: compressed.budget),
-                budget: compressed.budget
-            )
+            try Task.checkCancellation()
+            let input = BudgetedContext(window: compressed.window, budget: compressed.budget)
+            let currentBudget = compressed.budget
+            compressed = try await runWithTimeout(stage: "compress") {
+                try await compressStage.process(input, budget: currentBudget)
+            }
         }
         budget = compressed.budget
 
         var paged = PagedContext(window: compressed.window, budget: compressed.budget, pagedOut: [])
         if mode == .full, let pageStage {
-            paged = try await pageStage.process(
-                CompressedContext(
-                    window: paged.window,
-                    budget: paged.budget,
-                    compressionReport: compressed.compressionReport
-                ),
-                budget: paged.budget
+            try Task.checkCancellation()
+            let input = CompressedContext(
+                window: paged.window,
+                budget: paged.budget,
+                compressionReport: compressed.compressionReport
             )
+            let currentBudget = paged.budget
+            paged = try await runWithTimeout(stage: "page") {
+                try await pageStage.process(input, budget: currentBudget)
+            }
         }
         budget = paged.budget
 
@@ -139,7 +180,12 @@ public actor MembranePipeline {
             metadata: paged.window.metadata
         )
         if mode == .full, let emitStage {
-            plannedRequest = try await emitStage.process(paged, budget: budget)
+            try Task.checkCancellation()
+            let input = paged
+            let currentBudget = budget
+            plannedRequest = try await runWithTimeout(stage: "emit") {
+                try await emitStage.process(input, budget: currentBudget)
+            }
         }
 
         return plannedRequest

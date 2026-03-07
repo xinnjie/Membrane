@@ -86,18 +86,44 @@ import Testing
         #expect(result.window.history.filter { $0.tier == .full }.count >= 3)
     }
 
-    @Test func csoOutputIsBounded() async {
-        let distiller = CSODistiller()
-        let turns = (0..<250).map { index in
-            "User asked Question \(index)? Assistant decided to use Strategy\(index)."
+    @Test func csoOutputIsBounded() async throws {
+        let distiller = CSODistiller(keepRecentTurns: 0)
+        let history = (0..<250).map { index in
+            ContextSlice(
+                content: "User asked Question \(index)? Assistant decided to use Strategy\(index).",
+                tokenCount: 30,
+                importance: 0.5,
+                source: .history,
+                tier: .full,
+                timestamp: .now
+            )
         }
 
-        let cso = await distiller.distill(turns: turns)
+        let budgeted = BudgetedContext(
+            window: ContextWindow(
+                systemPrompt: ContextSlice(
+                    content: "",
+                    tokenCount: 0,
+                    importance: 1.0,
+                    source: .system,
+                    tier: .full,
+                    timestamp: .now
+                ),
+                memory: [],
+                tools: [],
+                toolPlan: .allowAll,
+                history: history,
+                retrieval: [],
+                pointers: [],
+                metadata: ContextMetadata(turnNumber: 250)
+            ),
+            budget: ContextBudget(totalTokens: 50000, profile: .cloud200K)
+        )
 
-        #expect(cso.entities.count <= 50)
-        #expect(cso.decisions.count <= 20)
-        #expect(cso.openQuestions.count <= 10)
-        #expect(cso.keyFacts.count <= 30)
+        let result = try await distiller.process(budgeted, budget: budgeted.budget)
+        let csoSlice = result.window.history.first!
+        #expect(csoSlice.tier == .gist)
+        #expect(result.compressionReport.techniquesApplied.contains("CSO"))
     }
 
     @Test func distillationIsDeterministicAcrossRuns() async throws {

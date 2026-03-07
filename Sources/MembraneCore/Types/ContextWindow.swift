@@ -31,6 +31,7 @@ public struct ContextWindow: Sendable {
     public var totalTokenCount: Int {
         systemPrompt.tokenCount
         + memory.reduce(0) { $0 + $1.tokenCount }
+        + tools.reduce(0) { $0 + $1.estimatedTokens }
         + history.reduce(0) { $0 + $1.tokenCount }
         + retrieval.reduce(0) { $0 + $1.tokenCount }
     }

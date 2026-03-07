@@ -68,7 +68,7 @@ public struct ContextStateObject: Sendable, Codable {
     }
 
     public var estimatedTokenCount: Int {
-        max(formatted().count / 4, 1)
+        estimateTokenCount(from: formatted())
     }
 
     package mutating func trimBounds() {

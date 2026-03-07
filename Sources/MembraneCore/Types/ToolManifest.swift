@@ -11,9 +11,9 @@ public struct ToolManifest: Sendable, Equatable {
 
     public var estimatedTokens: Int {
         if let fullSchema {
-            return max(fullSchema.count / 4, 1)
+            return estimateTokenCount(from: fullSchema)
         }
 
-        return max((name.count + description.count) / 4, 1)
+        return estimateTokenCount(from: name + description)
     }
 }

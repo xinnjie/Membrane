@@ -53,8 +53,6 @@ public actor RAPTORWaxIndex: RAPTORIndex {
         if let parentID = node.parentID {
             metadataEntries[MetadataKey.parentID] = parentID
         }
-        metadataEntries = metadataEntries.sorted(by: { $0.key < $1.key })
-            .reduce(into: [:]) { partial, pair in partial[pair.key] = pair.value }
 
         let options = FrameMetaSubset(
             kind: "membrane.raptorNode",
@@ -237,7 +235,7 @@ public actor RAPTORWaxIndex: RAPTORIndex {
         let text = String(data: textData, encoding: .utf8) ?? ""
         let depth = Int(entries[MetadataKey.depth] ?? "") ?? 0
         let tokenCount = Int(entries[MetadataKey.tokenCount] ?? "")
-            ?? max(1, text.count / 4)
+            ?? estimateTokenCount(from: text)
         let parentID = entries[MetadataKey.parentID]
 
         let node = RAPTORNode(

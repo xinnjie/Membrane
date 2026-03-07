@@ -57,14 +57,12 @@ public actor WaxStorageBackend: PointerStore {
         let pointerID = Self.pointerID(for: payload)
         let sha256 = Self.sha256Hex(payload)
 
-        var metadataEntries: [String: String] = [
+        let metadataEntries: [String: String] = [
             MetadataKey.kind: MetadataKey.pointerPayloadKind,
             MetadataKey.pointerID: pointerID,
             MetadataKey.pointerSHA256: sha256,
             MetadataKey.pointerDataType: dataType.rawValue,
         ]
-        metadataEntries = metadataEntries.sorted(by: { $0.key < $1.key })
-            .reduce(into: [:]) { partial, pair in partial[pair.key] = pair.value }
 
         let options = FrameMetaSubset(
             kind: "membrane.pointerPayload",
