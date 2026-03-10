@@ -7,9 +7,14 @@ let useLocalDeps = ProcessInfo.processInfo.environment["MEMBRANE_USE_LOCAL_DEPS"
 
 var dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/apple/swift-collections.git", from: "1.1.0"),
-    // Keep Hive pinned to Swarm's dependency (avoid mixing local/remote HiveCore in the graph).
-    .package(url: "https://github.com/christopherkarani/Hive", from: "0.1.0"),
 ]
+
+if useLocalDeps {
+    dependencies.append(.package(path: packageRoot.appendingPathComponent("../Hive").path))
+} else {
+    // Keep Hive pinned to Swarm's dependency when using remote packages.
+    dependencies.append(.package(url: "https://github.com/christopherkarani/Hive", from: "0.1.0"))
+}
 
 if useLocalDeps {
     dependencies += [
@@ -19,7 +24,6 @@ if useLocalDeps {
                 .trait(name: "OpenAI"),
                 .trait(name: "OpenRouter"),
                 .trait(name: "Anthropic"),
-                .trait(name: "MLX"),
             ]
         ),
         .package(path: packageRoot.appendingPathComponent("../Wax").path),
@@ -33,7 +37,6 @@ if useLocalDeps {
                 .trait(name: "OpenAI"),
                 .trait(name: "OpenRouter"),
                 .trait(name: "Anthropic"),
-                .trait(name: "MLX"),
             ]
         ),
         .package(url: "https://github.com/christopherkarani/Wax.git", from: "0.1.3"),
