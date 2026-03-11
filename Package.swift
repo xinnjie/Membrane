@@ -3,7 +3,12 @@ import PackageDescription
 import Foundation
 
 let packageRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-let useLocalDeps = ProcessInfo.processInfo.environment["MEMBRANE_USE_LOCAL_DEPS"] == "1"
+let hasLocalDepsCheckout =
+    FileManager.default.fileExists(atPath: packageRoot.appendingPathComponent("../Hive").path) &&
+    FileManager.default.fileExists(atPath: packageRoot.appendingPathComponent("../Conduit").path) &&
+    FileManager.default.fileExists(atPath: packageRoot.appendingPathComponent("../Wax").path)
+let useLocalDeps =
+    ProcessInfo.processInfo.environment["MEMBRANE_USE_LOCAL_DEPS"] == "1" || hasLocalDepsCheckout
 
 var dependencies: [Package.Dependency] = [
     .package(url: "https://github.com/apple/swift-collections.git", from: "1.1.0"),
